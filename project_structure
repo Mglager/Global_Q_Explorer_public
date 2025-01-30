@@ -1,0 +1,11 @@
+Global_Q_Explorer/
+├── app.py
+├── data/
+│   └── market_data.csv
+├── src/
+│   ├── __init__.py
+│   ├── data_loader.py
+│   ├── data_processor.py
+│   ├── visualizations.py
+│   └── analysis.py
+└── requirements.txt 
