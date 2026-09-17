@@ -4,6 +4,7 @@ from src.data_loader import DataLoader
 from src.data_processor import DataProcessor
 from src.visualizations import Visualizer
 from src.analysis import Analysis
+from src import metrics, views
 from datetime import datetime
 
 e_COLORS = {
@@ -175,15 +176,23 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Group name mappings
+# Group name mappings. The data directories are named me_<cat>_monthly_<vintage>,
+# so the label is looked up from the category the loader resolves, not from the
+# directory name itself. A new data vintage therefore needs no change here.
 GROUP_NAMES = {
     "momentum": "Momentum",
-    "value": "Value-versus-Growth",
+    "value-growth": "Value-versus-Growth",
     "investment": "Investment",
     "profitability": "Profitability",
     "intangibles": "Intangibles",
-    "frictions": "Frictions"
+    "frictions": "Trading Frictions",
 }
+
+
+def group_label(group):
+    """'me_prof_monthly_2025' -> 'Profitability'"""
+    category = DataLoader.group_to_category(group)
+    return GROUP_NAMES.get(category, category)
 
 # Factor name mappings
 FACTOR_NAMES = {
@@ -405,24 +414,23 @@ RANK_NAMES = {
     "rank_inv": "Investment"
 }
 
+def _base_factor_name(factor):
+    """Name for one anomaly code, preferring the metric catalog.
+
+    The catalog is generated from the same technical document as the docs, so
+    the app and docs/METRICS.md never drift apart. FACTOR_NAMES below is the
+    fallback for when the catalog file is absent.
+    """
+    code = DataLoader.strip_me_prefix(factor)
+    return metrics.display_name(code, fallback=FACTOR_NAMES.get(code, code))
+
+
 def get_display_name(factor_key):
     """Get display name for a factor, handling group prefixes"""
     if '/' in factor_key:
         group, factor = factor_key.split('/')
-        group_display = GROUP_NAMES.get(group, group)
-        if 'me_' in factor:
-            factor_stripped = factor.replace('me_', '')
-            base_name = FACTOR_NAMES.get(factor_stripped, factor_stripped)
-        else:
-            base_name = FACTOR_NAMES.get(factor, factor)
-        return f"{group_display}: {base_name}"
-    else:
-        if 'me_' in factor_key:
-            factor_stripped = factor_key.replace('me_', '')
-            base_name = FACTOR_NAMES.get(factor_stripped, factor_stripped)
-        else:
-            base_name = FACTOR_NAMES.get(factor_key, factor_key)
-        return base_name
+        return f"{group_label(group)}: {_base_factor_name(factor)}"
+    return _base_factor_name(factor_key)
 
 def create_factor_display_dict(factors, group=None):
     """Create a dictionary mapping display names to factor codes"""
@@ -484,11 +492,37 @@ def create_multifactor_portfolio(factor_data, weights=None):
 
 def main():
     #st.set_page_config(page_title="Global Q Explorer", layout="wide")
-    st.title("Global Q Explorer")
 
     # Load Data
     data_loader = DataLoader()
     data_dict = data_loader.load_data_directory("data")
+
+    vintage = data_loader.detect_vintage("data")
+    first_date, last_date = data_loader.get_sample_range(data_dict)
+
+    view = st.sidebar.radio(
+        "View",
+        options=["Portfolio Analysis", "Metric Reference", "Factor Model Alphas"],
+    )
+    if first_date is not None and last_date is not None:
+        coverage = " - {} to {}".format(
+            first_date.strftime("%b %Y"), last_date.strftime("%b %Y")
+        )
+    else:
+        coverage = ""
+    st.sidebar.caption(
+        "global-q.org testing portfolios, {} vintage{}".format(vintage or "unknown", coverage)
+    )
+    st.sidebar.markdown("---")
+
+    if view == "Metric Reference":
+        views.render_metric_reference("data")
+        return
+    if view == "Factor Model Alphas":
+        views.render_factor_models(data_dict, "data")
+        return
+
+    st.title("Global Q Explorer")
     
     # Sidebar Controls
     st.sidebar.header("Data Selection")
@@ -501,7 +535,7 @@ def main():
     selected_factors = {}
     
     for group in available_groups:
-        group_display = GROUP_NAMES.get(group, group)
+        group_display = group_label(group)
         with st.sidebar.expander(f"{group_display}"):
             group_factors = data_loader.get_available_factors(data_dict, group)
             factor_display_dict = create_factor_display_dict(group_factors, group)

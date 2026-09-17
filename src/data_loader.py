@@ -1,7 +1,20 @@
+import os
+import re
+import glob
+
 import pandas as pd
 import streamlit as st
-import os
-from pathlib import Path
+
+# Directory name -> short category key used by the metric catalog.
+GROUP_TO_CATEGORY = {
+    "me_mom": "momentum",
+    "me_vvg": "value-growth",
+    "me_inv": "investment",
+    "me_prof": "profitability",
+    "me_intan": "intangibles",
+    "me_fric": "frictions",
+}
+
 
 class DataLoader:
     @staticmethod
@@ -12,42 +25,115 @@ class DataLoader:
         return df
 
     @staticmethod
+    def detect_vintage(base_path="data"):
+        """Find the data vintage (e.g. '2025') from the market portfolio filename.
+
+        The global-q.org library stamps the last sample year into every filename,
+        so the vintage is read off the data rather than hard-coded. Updating to a
+        new release is then a matter of dropping in the new files.
+        """
+        candidates = glob.glob(os.path.join(base_path, "portf_me_monthly_*.csv"))
+        years = []
+        for path in candidates:
+            match = re.search(r"portf_me_monthly_(\d{4})\.csv$", os.path.basename(path))
+            if match:
+                years.append(match.group(1))
+        return max(years) if years else None
+
+    @staticmethod
+    def market_portfolio_filename(base_path="data"):
+        """Filename of the size-decile market portfolio file for the current vintage."""
+        vintage = DataLoader.detect_vintage(base_path)
+        return f"portf_me_monthly_{vintage}.csv" if vintage else None
+
+    @staticmethod
+    def parse_factor_name(filename):
+        """'portf_me_roe_1_monthly_2025.csv' -> 'me_roe_1'"""
+        stem = os.path.splitext(os.path.basename(filename))[0]
+        stem = stem.split('portf_')[-1]
+        return re.sub(r"_monthly_\d{4}$", "", stem)
+
+    @staticmethod
+    def group_to_category(group_name):
+        """'me_prof_monthly_2025' -> 'profitability'"""
+        prefix = re.sub(r"_monthly_\d{4}$", "", group_name)
+        return GROUP_TO_CATEGORY.get(prefix, prefix)
+
+    @staticmethod
+    def strip_me_prefix(factor_key):
+        """'me_roe_1' -> 'roe_1'. Only the leading 'me_' is removed."""
+        return factor_key[3:] if factor_key.startswith('me_') else factor_key
+
+    @staticmethod
     @st.cache_data
     def load_data_directory(base_path="data"):
         """Load and organize all available datasets"""
         data_dict = {}
-        
+
+        market_name = DataLoader.market_portfolio_filename(base_path)
+
         # First load market portfolio data
-        market_file = os.path.join(base_path, "portf_me_monthly_2023.csv")
-        if os.path.exists(market_file):
-            market_data = pd.read_csv(market_file)
-            market_data = DataLoader.create_date_column(market_data)
-            market_data['ret_vw'] = market_data['ret_vw'] / 100
-            data_dict['market_portfolio'] = market_data
-        
+        if market_name:
+            market_file = os.path.join(base_path, market_name)
+            if os.path.exists(market_file):
+                market_data = pd.read_csv(market_file)
+                market_data = DataLoader.create_date_column(market_data)
+                market_data['ret_vw'] = market_data['ret_vw'] / 100
+                data_dict['market_portfolio'] = market_data
+
         # Walk through all subdirectories in the data folder
         for root, dirs, files in os.walk(base_path):
             for file in files:
-                if file.endswith('.csv') and file != "portf_me_monthly_2023.csv":
-                    # Get relative path components
-                    rel_path = os.path.relpath(root, base_path)
-                    group_name = rel_path.split(os.sep)[0]  # First subdirectory is the group name
-                    
-                    # Create group if it doesn't exist
-                    if group_name not in data_dict:
-                        data_dict[group_name] = {}
-                    
-                    # Load the CSV file
-                    file_path = os.path.join(root, file)
-                    df = pd.read_csv(file_path)
-                    df = DataLoader.create_date_column(df)
-                    df['ret_vw'] = df['ret_vw'] / 100
-                    
-                    # Extract factor name from filename
-                    factor_name = os.path.splitext(file)[0].split('portf_')[-1].split('_monthly')[0]
-                    data_dict[group_name][factor_name] = df
-        
+                if not file.endswith('.csv') or file == market_name:
+                    continue
+                if file.startswith('q5_factors'):
+                    continue
+
+                rel_path = os.path.relpath(root, base_path)
+                if rel_path == os.curdir:
+                    continue
+                group_name = rel_path.split(os.sep)[0]
+
+                if group_name not in data_dict:
+                    data_dict[group_name] = {}
+
+                file_path = os.path.join(root, file)
+                df = pd.read_csv(file_path)
+                df = DataLoader.create_date_column(df)
+                df['ret_vw'] = df['ret_vw'] / 100
+
+                factor_name = DataLoader.parse_factor_name(file)
+                data_dict[group_name][factor_name] = df
+
         return data_dict
+
+    @staticmethod
+    @st.cache_data
+    def load_q5_factors(base_path="data"):
+        """Load the q5 factor returns (R_F, R_MKT, R_ME, R_IA, R_ROE, R_EG).
+
+        Source: global-q.org, Hou, Mo, Xue and Zhang (2021). Returns are stored
+        in percent in the source file and are converted to decimals here so they
+        sit on the same scale as the testing-portfolio returns.
+        """
+        candidates = sorted(glob.glob(os.path.join(base_path, "q5_factors_monthly_*.csv")))
+        if not candidates:
+            return None
+
+        df = pd.read_csv(candidates[-1])
+        df = DataLoader.create_date_column(df)
+        for col in df.columns:
+            if col.startswith('R_'):
+                df[col] = df[col] / 100
+        return df
+
+    @staticmethod
+    def get_sample_range(data_dict):
+        """(first date, last date) of the market portfolio, for display."""
+        market = data_dict.get('market_portfolio')
+        if market is None or 'date' not in market.columns:
+            return None, None
+        return market['date'].min(), market['date'].max()
 
     @staticmethod
     def get_portfolio_columns():
@@ -85,10 +171,18 @@ class DataLoader:
         return ranks
 
     @staticmethod
+    def get_factor_rank_column(df):
+        """The anomaly rank column of a two-way sorted file (not rank_ME)."""
+        for col in df.columns:
+            if col.startswith('rank_') and col != 'rank_ME':
+                return col
+        return None
+
+    @staticmethod
     def get_factor_data(data_dict, group, factors, rank_ME=None, factor_ranks=None):
         """
         Get data for specific factors and ranks
-        
+
         Parameters:
         - data_dict: The data dictionary
         - group: The group name
@@ -99,16 +193,16 @@ class DataLoader:
         factor_data = {}
         for factor in factors:
             df = data_dict[group][factor].copy()
-            
+
             # Apply market cap filter if specified
             if rank_ME is not None:
                 df = df[df['rank_ME'] == rank_ME]
-            
+
             # Apply factor-specific rank filter if specified
             if factor_ranks and factor in factor_ranks:
                 for rank_col, rank_val in factor_ranks[factor].items():
                     df = df[df[rank_col] == rank_val]
-            
+
             factor_data[factor] = df
         return factor_data
 
@@ -130,4 +224,4 @@ class DataLoader:
     def get_available_market_caps(data_dict, group, factor):
         """Get available market cap ranks for a factor"""
         if group in data_dict and factor in data_dict[group]:
-            return sorted(data_dict[group][factor]['rank_ME'].unique()) 
+            return sorted(data_dict[group][factor]['rank_ME'].unique())

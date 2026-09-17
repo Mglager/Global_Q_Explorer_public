@@ -1,124 +1,150 @@
 # Global Q Explorer
 
-A Streamlit application for exploring and analyzing global factor portfolios.
+A Streamlit app for exploring the **global-q.org testing portfolios** — the
+201 equity anomalies replicated by Hou, Xue and Zhang on one consistent data
+pipeline.
 
-## Setup Options
+Current data: the **2025 vintage**, released July 2026, covering
+**January 1967 to December 2025**.
 
-You can run this application either locally with Python or using Docker.
+## What you can do with it
 
-### A. Local Python Setup
+| View | What it answers |
+|---|---|
+| **Portfolio Analysis** | How has this anomaly's portfolio performed? Cumulative and excess returns, correlations, rolling statistics, drawdowns, and a weighted multifactor portfolio you build yourself. |
+| **Metric Reference** | What *is* this signal? A searchable dictionary of all 201 anomalies — definition, exact construction, inputs, sort, expected direction and the paper it comes from. |
+| **Factor Model Alphas** | Does a factor model explain it? Long-short spreads regressed on CAPM, the q-factor model and q5, with alphas, t-statistics and factor loadings — plus a one-click screen across a whole category. |
 
-1. **Prerequisites**
-   - Python 3.8 or higher
-   - pip (Python package installer)
+The Metric Reference is also written out as markdown: start at
+[docs/METRICS.md](docs/METRICS.md).
 
-2. **Clone the Repository**
-   ```bash
-   git clone https://github.com/yourusername/Global_Q_Explorer.git
-   cd Global_Q_Explorer
-   ```
+## Setup
 
-3. **Create and Activate Virtual Environment (Recommended)**
-   ```bash
-   # Windows
-   python -m venv venv
-   .\venv\Scripts\activate
+### Local Python
 
-   # Linux/Mac
-   python -m venv venv
-   source venv/bin/activate
-   ```
+```bash
+python -m venv venv
+# Windows
+.\venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
 
-4. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-5. **Run the Application**
-   ```bash
-   streamlit run app.py
-   ```
+Then open <http://localhost:8501>.
 
-6. **Access the Application**
-   - Open your web browser and go to `http://localhost:8501`
+### Docker
 
-### B. Docker Setup
+```bash
+docker compose up --build
+```
 
-1. **Prerequisites**
-   - Docker installed on your system
-   - Docker Compose (optional, but recommended)
+Or without compose:
 
-2. **Clone the Repository**
-   ```bash
-   git clone https://github.com/yourusername/Global_Q_Explorer.git
-   cd Global_Q_Explorer
-   ```
+```bash
+docker build -t global-q-explorer .
+docker run -p 8501:8501 global-q-explorer
+```
 
-3. **Build and Run with Docker Compose (Recommended)**
-   ```bash
-   docker-compose up --build
-   ```
+## The data
 
-   Or using Docker directly:
-   ```bash
-   docker build -t global-q-explorer .
-   docker run -p 8501:8501 global-q-explorer
-   ```
-
-4. **Access the Application**
-   - Open your web browser and go to `http://localhost:8501`
-
-## Project Structure
+The app ships the **two-way, size-interacted** testing portfolios: each anomaly
+is sorted into 3 size groups × 5 signal quintiles, value-weighted, on NYSE
+breakpoints.
 
 ```
-Global_Q_Explorer/
-├── app.py                 # Main Streamlit application
-├── src/                   # Source code
-│   ├── analysis.py       # Analysis functions
-│   ├── data_loader.py    # Data loading utilities
-│   ├── data_processor.py # Data processing functions
-│   └── visualizations.py # Visualization functions
-├── data/                 # Data directory
-├── requirements.txt      # Python dependencies
-├── Dockerfile           # Docker configuration
-└── docker-compose.yml   # Docker Compose configuration
+data/
+├── me_mom_monthly_2025/      43 momentum anomalies
+├── me_vvg_monthly_2025/      32 value-versus-growth
+├── me_inv_monthly_2025/      32 investment
+├── me_prof_monthly_2025/     50 profitability
+├── me_intan_monthly_2025/    33 intangibles
+├── me_fric_monthly_2025/     10 trading frictions
+├── portf_me_monthly_2025.csv     size deciles, used as the market reference
+├── q5_factors_monthly_2025.csv   q5 factor returns
+└── metrics_catalog.json          definitions behind every code
+```
+
+Each anomaly file has `year`, `month`, `rank_ME` (1 = micro … 3 = big),
+`rank_<CODE>` (1 = lowest signal … 5 = highest), `nstocks` and `ret_vw`, the
+value-weighted monthly return **in percent**.
+
+`metrics_catalog.json` is the single source of truth for what each code means.
+The app and the docs both read it, so they cannot drift apart.
+
+No vintage is hard-coded anywhere — the loader reads it off the filenames.
+
+## Updating to a new release
+
+```bash
+python scripts/fetch_data.py --vintage 2026   # download and lay out the new files
+python scripts/build_docs.py                  # regenerate the markdown docs
+```
+
+Full instructions, including what to do when a release adds or drops an
+anomaly, are in [docs/UPDATING.md](docs/UPDATING.md).
+
+## Project structure
+
+```
+app.py                      Streamlit entry point and the Portfolio Analysis view
+src/
+├── data_loader.py          vintage detection, file discovery, loading
+├── data_processor.py       portfolio statistics
+├── analysis.py             rolling statistics, drawdowns, market-relative stats
+├── factor_models.py        CAPM / q-factor / q5 regressions, spread construction
+├── metrics.py              access to the metric catalog
+├── views.py                Metric Reference and Factor Model Alphas
+└── visualizations.py       plotly chart builders
+scripts/
+├── fetch_data.py           download a vintage from global-q.org
+└── build_docs.py           regenerate docs from the catalog
+docs/
+├── METRICS.md              metric index and library conventions
+├── metrics/                one page per category, full detail per anomaly
+├── REFERENCES.md           the papers behind the library
+├── UPDATING.md             how to move to a new data release
+└── portfoliostd_2026jul.pdf  the library's own technical document
 ```
 
 ## Dependencies
 
-The main dependencies are:
-- streamlit
-- pandas
-- numpy
-- plotly
-- scipy
+streamlit, pandas, numpy, plotly, scipy, statsmodels, seaborn, matplotlib,
+python-dateutil. See `requirements.txt`.
 
-See `requirements.txt` for the complete list of dependencies.
+## Sources and credit
 
-## Data Requirements
+The data and its construction are entirely the work of Kewei Hou, Chen Xue and
+Lu Zhang, published at <https://global-q.org>. The four q-factor papers and the
+technical documents are listed in [docs/REFERENCES.md](docs/REFERENCES.md).
 
-Place your data files in the `data/` directory. The application expects data files in a specific format:
-- CSV files with columns including 'date', 'ret_vw', 'ret_ew'
-- Files should be organized by factor groups
+Check the terms on global-q.org before redistributing the data.
+
+## Notes on reading the output
+
+- **Direction fields are expectations, not results.** Where the technical
+  document does not state which end of a sort should win, the metric pages use
+  the standard sign from the literature. The Factor Model Alphas view is where
+  you see what the data actually did.
+- **Attribution is only as good as the source.** The technical document names an
+  originating paper for 89 of the 201 anomalies. The rest are marked as having
+  no named source rather than being given a guessed citation.
+- **Some series start late.** Analyst-based signals begin in the 1970s,
+  systematic volatility in 1990. Each metric page states its start.
 
 ## Troubleshooting
 
-1. **Port Already in Use**
-   - If port 8501 is already in use, Streamlit will automatically try the next available port
-   - Check the terminal output for the correct URL
+**Port already in use** — Streamlit picks the next free port; check the terminal
+for the URL.
 
-2. **Memory Issues**
-   - If you encounter memory issues, try running Python with increased memory limit:
-     ```bash
-     python -X "max_memory=8G" -m streamlit run app.py
-     ```
+**`No metric catalog found`** — `data/metrics_catalog.json` is missing. It is
+committed to the repo; restore it, or see [docs/UPDATING.md](docs/UPDATING.md).
 
-3. **Docker Issues**
-   - If you encounter permission issues with Docker:
-     ```bash
-     sudo docker-compose up --build
-     ```
+**`No q-factor return file found`** — the Factor Model Alphas view needs
+`data/q5_factors_monthly_<vintage>.csv`. Run
+`python scripts/fetch_data.py --vintage <vintage>` to fetch it.
 
-## Support
-
-For issues and feature requests, please create an issue in the GitHub repository. 
+**Memory** — loading all 200 anomaly files takes a few hundred MB. Streamlit
+caches them, so the first load is the slow one.

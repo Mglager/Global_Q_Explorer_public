@@ -1,11 +1,32 @@
 Global_Q_Explorer/
-├── app.py
+├── app.py                          Streamlit entry point + Portfolio Analysis view
+├── requirements.txt
+├── Dockerfile
 ├── data/
-│   └── market_data.csv
+│   ├── me_mom_monthly_2025/        43 momentum anomalies
+│   ├── me_vvg_monthly_2025/        32 value-versus-growth
+│   ├── me_inv_monthly_2025/        32 investment
+│   ├── me_prof_monthly_2025/       50 profitability
+│   ├── me_intan_monthly_2025/      33 intangibles
+│   ├── me_fric_monthly_2025/       10 trading frictions
+│   ├── portf_me_monthly_2025.csv   size deciles (market reference)
+│   ├── q5_factors_monthly_2025.csv q5 factor returns
+│   └── metrics_catalog.json        definitions for all 201 anomalies
 ├── src/
-│   ├── __init__.py
-│   ├── data_loader.py
-│   ├── data_processor.py
-│   ├── visualizations.py
-│   └── analysis.py
-└── requirements.txt 
+│   ├── data_loader.py              vintage detection, discovery, loading
+│   ├── data_processor.py           portfolio statistics
+│   ├── analysis.py                 rolling stats, drawdowns, market-relative stats
+│   ├── factor_models.py            CAPM / q-factor / q5 regressions
+│   ├── metrics.py                  metric catalog access
+│   ├── views.py                    Metric Reference + Factor Model Alphas
+│   └── visualizations.py           plotly chart builders
+├── scripts/
+│   ├── fetch_data.py               download a vintage from global-q.org
+│   └── build_docs.py               regenerate docs from the catalog
+└── docs/
+    ├── METRICS.md                  metric index + library conventions
+    ├── metrics/                    one page per category, detail per anomaly
+    ├── REFERENCES.md               the papers behind the library
+    ├── UPDATING.md                 how to move to a new data release
+    ├── portfoliostd_2026jul.pdf    the library's technical document
+    └── release_notes_2026jul.pdf   release notes for the 2025 vintage
