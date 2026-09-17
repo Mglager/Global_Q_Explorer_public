@@ -742,9 +742,6 @@ def main():
         # Add date range selection
         st.subheader("Analysis Period Selection")
         
-        # Convert dates to datetime for the slider
-        date_range = pd.date_range(min_date, max_date, freq='M')
-        
         # Create two columns for the date range inputs
         date_col1, date_col2 = st.columns(2)
         
