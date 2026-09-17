@@ -93,7 +93,11 @@ def regress(returns, factors, factor_cols, nw_lags=12):
     t-statistics use Newey-West standard errors with `nw_lags` lags, which is
     the convention in this literature; pass nw_lags=0 for plain OLS.
     """
-    aligned = pd.concat([returns.rename("y"), factors[factor_cols]], axis=1).dropna()
+    # sort=True keeps the rows in date order and pins the behaviour: pandas 4
+    # changes the default for this case.
+    aligned = pd.concat(
+        [returns.rename("y"), factors[factor_cols]], axis=1, sort=True
+    ).dropna()
     if len(aligned) <= len(factor_cols) + 1:
         return None
 

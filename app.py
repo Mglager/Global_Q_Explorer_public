@@ -872,8 +872,11 @@ def main():
                 )
             })
             
-            # Format the statistics based on the type of metric
-            formatted_stats = combined_stats.copy()
+            # Format the statistics based on the type of metric.
+            # Cast to object first: the loop below writes formatted strings into
+            # what are numeric columns, and pandas 3 refuses to silently upcast
+            # a float column to hold a string.
+            formatted_stats = combined_stats.copy().astype(object)
             
             # Define formatting rules for different types of metrics
             percentage_metrics = [

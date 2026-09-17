@@ -114,6 +114,31 @@ docs/
 streamlit, pandas, numpy, plotly, scipy, statsmodels, seaborn, matplotlib,
 python-dateutil. See `requirements.txt`.
 
+## Tests
+
+```bash
+pip install pytest
+pytest tests/
+```
+
+`tests/test_app.py` renders all three views and, critically, selects a factor
+first — the Portfolio Analysis code only runs after a selection, so a
+load-the-page check never reaches it. Two pandas releases have broken exactly
+that path.
+
+Streamlit Cloud installs the newest version of everything in
+`requirements.txt`, so it is worth running the tests against the latest
+packages before a push:
+
+```bash
+python -m venv .venv-latest
+.venv-latest/Scripts/pip install -U -r requirements.txt pytest
+.venv-latest/Scripts/python -m pytest tests/ -W error::FutureWarning
+```
+
+Promoting `FutureWarning` to an error catches the next deprecation before it
+becomes an outage.
+
 ## Sources and credit
 
 The data and its construction are entirely the work of Kewei Hou, Chen Xue and
